@@ -1,0 +1,103 @@
+frameworkVersion: "3"
+app: demo
+service: analytics-${self:app}
+
+useDotenv: true
+
+provider:
+  name: aws
+  runtime: nodejs16.x
+  region: us-east-1
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - "sqs:*"
+            - 'dynamodb:*'
+          Resource: "*"
+  httpApi:
+    cors: true
+
+
+plugins:
+  - serverless-plugin-typescript
+  # - serverless-dotenv-plugin
+
+package:
+  individually: true
+
+resources:
+  Resources:
+    # INGEST DATA
+    AnalyticsQueueDemoDLQ: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-sqs-queue.html
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-dlq-${sls:stage}-queue.fifo
+        FifoQueue: true
+    AnalyticsQueueDemo: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-sqs-queue.html
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-${sls:stage}-queue.fifo
+        FifoQueue: true
+        MessageRetentionPeriod: 345600 # 4 days
+        VisibilityTimeout: 10
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt:
+              - AnalyticsQueueDemoDLQ
+              - Arn
+          maxReceiveCount: 5
+    AnalyticsDemoDB: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-rds-dbinstance.html
+      Type: AWS::RDS::DBInstance
+      Properties:
+        Engine: MySQL
+        DBInstanceIdentifier: ${self:service}-${sls:stage}
+        DBName: ${env:DATABASE_NAME}
+        MasterUsername: admin
+        MasterUserPassword: adminPass
+        # Port: 3306
+        DBInstanceClass: db.t3.micro
+        StorageType: gp2
+        AllocatedStorage: '20'
+        PubliclyAccessible: true
+        # MonitoringInterval: 60
+        # MonitoringRoleARN: arn:aws:iam::${aws:accountId}:role/rds-monitoring-role
+        BackupRetentionPeriod: 7
+        StorageEncrypted: true
+        EnableCloudwatchLogsExports: 
+          - audit
+          - error
+          - general
+          - slowquery
+    
+functions:
+  # INGEST DATA
+  producer-analytics-demo-queue:
+    handler: src/producers/producerAnalyticsQueue.handler
+    events:
+      - httpApi:
+          path: /analytics
+          method: post
+    timeout: 6 # optional, in seconds, default is 6
+    environment:
+      QUEUE_ANALYTICS: https://sqs.${aws:region}.amazonaws.com/${aws:accountId}/${self:service}-${sls:stage}-queue.fifo
+  consumer-analytics-demo-queue:
+    handler: src/consumers/consumerAnalyticsQueue.handler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - AnalyticsQueueDemo
+              - Arn
+    memorySize: 1024 # optional, in MB, default is 1024
+    timeout: 6 # optional, in seconds, default is 6
+    environment:
+      DATABASE_URL:
+        Fn::Join:
+          - ''
+          - - mysql://${env:DATABASE_USERNAME}:${env:DATABASE_PASSWORD}@
+            - !GetAtt AnalyticsDemoDB.Endpoint.Address
+            - ':'
+            # - !GetAtt AnalyticsDemoDB.Endpoint.Port
+            - '${env:DATABASE_PORT}/${env:DATABASE_NAME}'
