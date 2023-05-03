@@ -8,7 +8,7 @@ export const mysqlService = async (sql: string) => {
             connectionLimit: 10,
             waitForConnections: true,
         };
-        console.log('connectionConfig', connectionConfig)
+        // console.log('connectionConfig', connectionConfig)
 
         const pool = mysql2.createPool(connectionConfig).promise();
         const [rows] = await pool.query(sql);

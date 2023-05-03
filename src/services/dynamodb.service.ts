@@ -19,7 +19,7 @@ export const createOrUpdateByPage = async function (Item: any) {
     await dynamoDBClient.put(params).promise();
     return Item;
   } catch (error) {
-    console.error("createOrUpdate.error:", error);
+    // console.error("createOrUpdate.error:", error);
     throw new Error(error);
   }
 };
@@ -37,7 +37,7 @@ export const getByPage = async function (
     TableName: ANALYTICS_TABLE_SUMARIZATION_NAME,
     KeyConditionExpression: `#pk = :pk and #cAt = :cAt`,
     ExpressionAttributeNames: {
-      "#pk": "businessId#range#pageName",
+      "#pk": "businessSlug#range#pageName",
       "#cAt": "created_at",
     },
     ExpressionAttributeValues: {
@@ -45,7 +45,7 @@ export const getByPage = async function (
       ":cAt": `${new Date().getFullYear()}-${new Date().getMonth() + 1}-${new Date().getDate()}`,
     },
   };
-  console.log("DDB.get.params", params);
+  // console.log("DDB.get.params", params);
   try {
     const data = await dynamoDBClient.query(params).promise();
     console.log("data", data.Items);

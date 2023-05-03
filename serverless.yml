@@ -71,24 +71,6 @@ resources:
           - slowquery
 
     # SUMARIZATION DATA
-    BusinessQueueDemoDLQ: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-sqs-queue.html
-      Type: AWS::SQS::Queue
-      Properties:
-        QueueName: ${self:service}-business-dlq-${sls:stage}-queue.fifo
-        FifoQueue: true
-    BusinessQueueDemo: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-sqs-queue.html
-      Type: AWS::SQS::Queue
-      Properties:
-        QueueName: ${self:service}-business-${sls:stage}-queue.fifo
-        FifoQueue: true
-        MessageRetentionPeriod: 345600 # 4 days
-        VisibilityTimeout: 30
-        RedrivePolicy:
-          deadLetterTargetArn:
-            Fn::GetAtt:
-              - BusinessQueueDemoDLQ
-              - Arn
-          maxReceiveCount: 5
     SumarizationQueueDemoDLQ: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-sqs-queue.html
       Type: AWS::SQS::Queue
       Properties:
@@ -107,23 +89,18 @@ resources:
               - SumarizationQueueDemoDLQ
               - Arn
           maxReceiveCount: 5
-    # TODO: Dynamo Table
     AnalyticsSumarizationTable: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-dynamodb-table.html
       Type: AWS::DynamoDB::Table
       Properties:
         AttributeDefinitions:
-          -
-            AttributeName: "businessSlug#range#pageName"
+          - AttributeName: "businessSlug#range#pageName"
             AttributeType: "S"
-          -
-            AttributeName: "created_at"
+          - AttributeName: "created_at"
             AttributeType: "S"
         KeySchema:
-          -
-            AttributeName: "businessSlug#range#pageName"
+          - AttributeName: "businessSlug#range#pageName"
             KeyType: "HASH"
-          -
-            AttributeName: "created_at"
+          - AttributeName: "created_at"
             KeyType: "RANGE"
         ProvisionedThroughput:
           ReadCapacityUnits: "5"
@@ -166,19 +143,20 @@ functions:
     handler: src/cronjobs/businessCronjob.handler
     events:
       - schedule: cron(0 0 * * ? *)
-    timeout: 60 # optional, in seconds, default is 6
+    timeout: 240 # optional, in seconds, default is 6
     environment:
       RANGES: 7,15,30
-      ANALYTICS_BUSINESS_QUEUE: https://sqs.${aws:region}.amazonaws.com/${aws:accountId}/${self:service}-business-${sls:stage}-queue.fifo
+      ANALYTICS_SUMARIZATION_QUEUE: https://sqs.${aws:region}.amazonaws.com/${aws:accountId}/${self:service}-sumarization-${sls:stage}-queue.fifo
       ENDPOINT_CLIENTS: ${env:ENDPOINT_CLIENTS}
-  sumarization-business-demo:
-    handler: src/cronjobs/sumarizationBusinessCronjob.handler
+  sumarization-business-trigger-demo:
+    handler: src/triggers/sumarizationBusinessTrigger.handler
     events:
       - sqs:
           arn:
             Fn::GetAtt:
               - SumarizationQueueDemo
               - Arn
+    timeout: 240 # optional, in seconds, default is 6
     environment:
       ANALYTICS_TABLE_NAME: ${env:ANALYTICS_TABLE_NAME}
       ANALYTICS_TABLE_SUMARIZATION_NAME: ${self:service}-${sls:stage}
@@ -197,3 +175,5 @@ functions:
       - httpApi:
           path: /analytics/{businessSlug}/{range}/{pageName}
           method: get
+    environment:
+      ANALYTICS_TABLE_SUMARIZATION_NAME: ${self:service}-${sls:stage}

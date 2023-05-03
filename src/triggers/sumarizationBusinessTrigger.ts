@@ -6,6 +6,8 @@ import * as FormatToGraphic from "../utils/formatToGraphic.util";
 
 export const handler = async (sqsEvent: SQSEvent) => {
   try {
+    console.log('sqsEvent.Records.count', sqsEvent.Records.length)
+    console.log('sqsEvent.Records', sqsEvent.Records)
     const BUSINESS_DATA: IBusinessResponseDTO = JSON.parse(sqsEvent.Records[0].body);
     const RANGE = sqsEvent.Records[0].attributes.MessageGroupId
     const HOME_PAGE_NAME = 'home'
@@ -26,11 +28,11 @@ export const handler = async (sqsEvent: SQSEvent) => {
       graphicViewsTotal: GRAPHIC_TOTAL_VIEWS
     };
 
-    console.log("HOME_PAGE_DATA", HOME_PAGE_DATA);
+    // console.log("HOME_PAGE_DATA", HOME_PAGE_DATA);
 
     await DynamoDB.createOrUpdateByPage(HOME_PAGE_DATA);
 
-    return Response.handler(200, `sumarization with success of client ${BUSINESS_DATA.slug}`)
+    return Response.handler(200, `sumarization with success of client ${BUSINESS_DATA.slug} of range: ${RANGE}`)
   } catch (error) {
     return Response.handler(500, error)
   }

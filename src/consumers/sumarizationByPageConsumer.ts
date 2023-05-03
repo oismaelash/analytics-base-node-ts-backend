@@ -21,6 +21,7 @@ export const handler = async (apiGatewayEvent: APIGatewayEvent) => {
     console.log("DATA", DATA)
     return Response.handler(200, JSON.stringify(DATA));
   } catch (error) {
+    console.log('error', error)
     return Response.handler(400, error);
   }
 };
