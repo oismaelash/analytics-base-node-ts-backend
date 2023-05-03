@@ -5,14 +5,14 @@ import {
 } from "@aws-sdk/client-sqs";
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import { randomUUID } from 'crypto'
-import { AnalyticsRequestDTO } from '../dto/analytics.request.dto'
-import * as DatetimeUtil from "../utils/datetime";
+import { IAnalyticsRequestDTO } from '../dtos/analytics.request.dto'
+import * as DatetimeUtil from "../utils/datetime.util";
 
 export const handler = async (event: APIGatewayProxyEvent) => {
   try {
     const sqs = new SQSClient({ region: process.env.AWS_REGION });
 
-    const data = JSON.parse(event.body!) as AnalyticsRequestDTO
+    const data = JSON.parse(event.body!) as IAnalyticsRequestDTO
     data.id = randomUUID()
     data.created_at = DatetimeUtil.getDatetimeIso();
     data.updated_at = DatetimeUtil.getDatetimeIso();
@@ -20,7 +20,7 @@ export const handler = async (event: APIGatewayProxyEvent) => {
     const SQS_PARAMS: SendMessageCommandInput = {
       MessageDeduplicationId: data.id,
       MessageBody: JSON.stringify(data),
-      QueueUrl: process.env.QUEUE_ANALYTICS,
+      QueueUrl: process.env.ANALYTICS_QUEUE,
       MessageGroupId: "1"
     };
 

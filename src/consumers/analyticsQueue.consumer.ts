@@ -1,7 +1,7 @@
 import { SQSEvent, SQSRecord } from 'aws-lambda';
-import { mysqlService } from '../services/mysql'
-import { AnalyticsRequestDTO } from '../dto/analytics.request.dto'
-import * as Queries from '../utils/queries'
+import { mysqlService } from '../services/mysql.service'
+import { IAnalyticsRequestDTO } from '../dtos/analytics.request.dto'
+import * as Queries from '../utils/queries.util'
 
 export const handler = async (event: SQSEvent) => {
 
@@ -10,7 +10,7 @@ export const handler = async (event: SQSEvent) => {
     console.log('sqs.data', messages)
     if (messages) {
       for (const message of messages) {
-        const sessionBody = JSON.parse(message.body) as AnalyticsRequestDTO
+        const sessionBody = JSON.parse(message.body) as IAnalyticsRequestDTO
         await sendToDataBase(sessionBody)
       }
     }
@@ -21,9 +21,9 @@ export const handler = async (event: SQSEvent) => {
   }
 }
 
-const sendToDataBase = async (data: AnalyticsRequestDTO) => {
+const sendToDataBase = async (data: IAnalyticsRequestDTO) => {
   try {
-    const query = Queries.insertAnalyticsTable(data)
+    const query = Queries.createSessionTable(data)
     console.log('query for execute', query)
     const result = await mysqlService(query)
     console.log('sendToDataBase', result)

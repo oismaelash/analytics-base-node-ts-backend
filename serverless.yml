@@ -71,6 +71,45 @@ resources:
           - general
           - slowquery
     
+    # SUMARIZATION DATA
+    BusinessQueueDemoDLQ: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-sqs-queue.html
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-business-dlq-${sls:stage}-queue.fifo
+        FifoQueue: true
+    BusinessQueueDemo: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-sqs-queue.html
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-business-${sls:stage}-queue.fifo
+        FifoQueue: true
+        MessageRetentionPeriod: 345600 # 4 days
+        VisibilityTimeout: 30
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt:
+              - BusinessQueueDemoDLQ
+              - Arn
+          maxReceiveCount: 5
+    SumarizationQueueDemoDLQ: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-sqs-queue.html
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-sumarization-dlq-${sls:stage}-queue.fifo
+        FifoQueue: true
+    SumarizationQueueDemo: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-sqs-queue.html
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-sumarization-${sls:stage}-queue.fifo
+        FifoQueue: true
+        MessageRetentionPeriod: 345600 # 4 days
+        VisibilityTimeout: 30
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt:
+              - SumarizationQueueDemoDLQ
+              - Arn
+          maxReceiveCount: 5
+    # TODO: Dynamo Table
+    
 functions:
   # INGEST DATA
   producer-analytics-demo-queue:
@@ -81,7 +120,7 @@ functions:
           method: post
     timeout: 6 # optional, in seconds, default is 6
     environment:
-      QUEUE_ANALYTICS: https://sqs.${aws:region}.amazonaws.com/${aws:accountId}/${self:service}-${sls:stage}-queue.fifo
+      ANALYTICS_QUEUE: https://sqs.${aws:region}.amazonaws.com/${aws:accountId}/${self:service}-${sls:stage}-queue.fifo
   consumer-analytics-demo-queue:
     handler: src/consumers/consumerAnalyticsQueue.handler
     events:
@@ -101,3 +140,40 @@ functions:
             - ':'
             # - !GetAtt AnalyticsDemoDB.Endpoint.Port
             - '${env:DATABASE_PORT}/${env:DATABASE_NAME}'
+  
+  # SUMARIZATION DATA
+  business-cron-job-demo:
+    handler: src/cronjobs/cronjobBusiness.handler
+    events:
+      - schedule: cron(0 0 * * ? *)
+    timeout: 60 # optional, in seconds, default is 6
+    environment:
+      RANGES: 7,15,30
+      ANALYTICS_BUSINESS_QUEUE: https://sqs.${aws:region}.amazonaws.com/${aws:accountId}/${self:service}-business-${sls:stage}-queue.fifo
+      ENDPOINT_CLIENTS: ${env:ENDPOINT_CLIENTS}
+  sumarization-business-demo: 
+    handler: src/cronjobs/cronjobSumarizationBusiness.handler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - SumarizationQueueDemo
+              - Arn
+    environment:
+      ANALYTICS_TABLE_NAME: ${env:ANALYTICS_TABLE_NAME}
+      ANALYTICS_TABLE_SUMARIZATION_NAME: ${self:service}-${sls:stage}
+      DATABASE_NAME: ${env:DATABASE_NAME}
+      DATABASE_URL:
+        Fn::Join:
+          - ''
+          - - mysql://${env:DATABASE_USERNAME}:${env:DATABASE_PASSWORD}@
+            - !GetAtt AnalyticsDemoDB.Endpoint.Address
+            - ':'
+            # - !GetAtt AnalyticsDemoDB.Endpoint.Port
+            - '${env:DATABASE_PORT}/${env:DATABASE_NAME}'
+  consumer-sumarization-by-page:
+    handler: src/consumers/consumerSumarizationByPage.handler
+    events:
+      - httpApi:
+          path: /analytics/{businessSlug}/{range}/{pageName}
+          method: get

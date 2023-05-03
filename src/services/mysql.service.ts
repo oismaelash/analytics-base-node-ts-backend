@@ -9,7 +9,7 @@ export const mysqlService = async (sql: string) => {
             waitForConnections: true,
         };
         console.log('connectionConfig', connectionConfig)
-    
+
         const pool = mysql2.createPool(connectionConfig).promise();
         const [rows] = await pool.query(sql);
         pool.end()
