@@ -14,11 +14,10 @@ provider:
         - Effect: Allow
           Action:
             - "sqs:*"
-            - 'dynamodb:*'
+            - "dynamodb:*"
           Resource: "*"
   httpApi:
     cors: true
-
 
 plugins:
   - serverless-plugin-typescript
@@ -59,18 +58,18 @@ resources:
         # Port: 3306
         DBInstanceClass: db.t3.micro
         StorageType: gp2
-        AllocatedStorage: '20'
+        AllocatedStorage: "20"
         PubliclyAccessible: true
         # MonitoringInterval: 60
         # MonitoringRoleARN: arn:aws:iam::${aws:accountId}:role/rds-monitoring-role
         BackupRetentionPeriod: 7
         StorageEncrypted: true
-        EnableCloudwatchLogsExports: 
+        EnableCloudwatchLogsExports:
           - audit
           - error
           - general
           - slowquery
-    
+
     # SUMARIZATION DATA
     BusinessQueueDemoDLQ: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-sqs-queue.html
       Type: AWS::SQS::Queue
@@ -109,11 +108,32 @@ resources:
               - Arn
           maxReceiveCount: 5
     # TODO: Dynamo Table
-    
+    AnalyticsSumarizationTable: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-dynamodb-table.html
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: "businessSlug#range#pageName"
+            AttributeType: "S"
+          -
+            AttributeName: "created_at"
+            AttributeType: "S"
+        KeySchema:
+          -
+            AttributeName: "businessSlug#range#pageName"
+            KeyType: "HASH"
+          -
+            AttributeName: "created_at"
+            KeyType: "RANGE"
+        ProvisionedThroughput:
+          ReadCapacityUnits: "5"
+          WriteCapacityUnits: "5"
+        TableName: ${self:service}-${sls:stage}
+
 functions:
   # INGEST DATA
   producer-analytics-demo-queue:
-    handler: src/producers/producerAnalyticsQueue.handler
+    handler: src/producers/analyticsQueueProducer.handler
     events:
       - httpApi:
           path: /analytics
@@ -122,7 +142,7 @@ functions:
     environment:
       ANALYTICS_QUEUE: https://sqs.${aws:region}.amazonaws.com/${aws:accountId}/${self:service}-${sls:stage}-queue.fifo
   consumer-analytics-demo-queue:
-    handler: src/consumers/consumerAnalyticsQueue.handler
+    handler: src/consumers/analyticsQueueConsumer.handler
     events:
       - sqs:
           arn:
@@ -134,16 +154,16 @@ functions:
     environment:
       DATABASE_URL:
         Fn::Join:
-          - ''
+          - ""
           - - mysql://${env:DATABASE_USERNAME}:${env:DATABASE_PASSWORD}@
             - !GetAtt AnalyticsDemoDB.Endpoint.Address
-            - ':'
+            - ":"
             # - !GetAtt AnalyticsDemoDB.Endpoint.Port
-            - '${env:DATABASE_PORT}/${env:DATABASE_NAME}'
-  
+            - "${env:DATABASE_PORT}/${env:DATABASE_NAME}"
+
   # SUMARIZATION DATA
   business-cron-job-demo:
-    handler: src/cronjobs/cronjobBusiness.handler
+    handler: src/cronjobs/businessCronjob.handler
     events:
       - schedule: cron(0 0 * * ? *)
     timeout: 60 # optional, in seconds, default is 6
@@ -151,8 +171,8 @@ functions:
       RANGES: 7,15,30
       ANALYTICS_BUSINESS_QUEUE: https://sqs.${aws:region}.amazonaws.com/${aws:accountId}/${self:service}-business-${sls:stage}-queue.fifo
       ENDPOINT_CLIENTS: ${env:ENDPOINT_CLIENTS}
-  sumarization-business-demo: 
-    handler: src/cronjobs/cronjobSumarizationBusiness.handler
+  sumarization-business-demo:
+    handler: src/cronjobs/sumarizationBusinessCronjob.handler
     events:
       - sqs:
           arn:
@@ -165,14 +185,14 @@ functions:
       DATABASE_NAME: ${env:DATABASE_NAME}
       DATABASE_URL:
         Fn::Join:
-          - ''
+          - ""
           - - mysql://${env:DATABASE_USERNAME}:${env:DATABASE_PASSWORD}@
             - !GetAtt AnalyticsDemoDB.Endpoint.Address
-            - ':'
+            - ":"
             # - !GetAtt AnalyticsDemoDB.Endpoint.Port
-            - '${env:DATABASE_PORT}/${env:DATABASE_NAME}'
+            - "${env:DATABASE_PORT}/${env:DATABASE_NAME}"
   consumer-sumarization-by-page:
-    handler: src/consumers/consumerSumarizationByPage.handler
+    handler: src/consumers/sumarizationByPageConsumer.handler
     events:
       - httpApi:
           path: /analytics/{businessSlug}/{range}/{pageName}

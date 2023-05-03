@@ -9,7 +9,12 @@ import { IBusinessResponseDTO } from "../dtos/business.response.dto"
 export const handler = async () => {
     try {
         const SQS = new SQSClient({ region: process.env.AWS_REGION });
-        const CLIENTS = (await axios.get(process.env.ENDPOINT_CLIENTS ?? '')).data as IBusinessResponseDTO[]
+
+        if(!process.env.ENDPOINT_CLIENTS){
+            throw new Error('ENDPOINT_CLIENTS undefined')
+        }
+
+        const CLIENTS = await (await axios.get(process.env.ENDPOINT_CLIENTS)).data as IBusinessResponseDTO[]
         const RANGES = process.env.RANGES?.split(',')
 
         if (!RANGES) {
